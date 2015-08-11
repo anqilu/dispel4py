@@ -39,18 +39,20 @@ number of processes if running in a parallel environment.
 import argparse
 import os
 import types
+import time
+import sys
+import json
 
 from dispel4py.core import GROUPING
 from dispel4py.utils import make_hash
 from dispel4py.new.mappings import config
+from dispel4py.new.monitor_workflow import calls_count
 
 STATUS_ACTIVE = 10
 STATUS_INACTIVE = 11
 STATUS_TERMINATED = 12
 # mapping for name to value
-STATUS = {STATUS_ACTIVE: 'ACTIVE',
-          STATUS_INACTIVE: 'INACTIVE',
-          STATUS_TERMINATED: 'TERMINATED'}
+STATUS = {STATUS_ACTIVE: 'ACTIVE', STATUS_INACTIVE: 'INACTIVE', STATUS_TERMINATED: 'TERMINATED'}
 
 
 def simpleLogger(self, msg):
@@ -85,7 +87,6 @@ class GenericWriter(object):
 
 
 class GenericWrapper(object):
-
     def __init__(self, pe):
         self.pe = pe
         self.pe.wrapper = self
@@ -93,6 +94,17 @@ class GenericWrapper(object):
             self.pe.outputconnections[o]['writer'] = GenericWriter(self, o)
         self.targets = {}
         self._sources = {}
+        self.read_time = 0
+        self.process_time = 0
+        self.write_time = 0
+        self.in_data_size = 0
+        self.out_data_size = 0
+        self.in_data_type = None
+        self.out_data_type = None
+        self._read_calls = 0
+        self._write_calls = 0
+        self.read_rate = 0
+        self.write_rate = 0
 
     @property
     def sources(self):
@@ -109,19 +121,62 @@ class GenericWrapper(object):
 
     def process(self):
         num_iterations = 0
+        total_in_size = 0
+        total_out_size = 0
+        in_data_types = set()
+        out_data_types = set()
+        process_time = 0
+        read_time = 0
+        write_time = 0
+
         self.pe.preprocess()
+
+        read_begin_time = time.time()
+
         result = self._read()
+
+        read_end_time = time.time()
+        read_time += read_end_time - read_begin_time
+
         inputs, status = result
-        # self.pe.log('Result: %s, status=%s' % (inputs, STATUS[status]))
+
         while status != STATUS_TERMINATED:
             if inputs is not None:
+                if inputs:
+                    total_in_size += sys.getsizeof(inputs)
+                    # get data type of the first input value
+                    in_type = type(inputs.itervalues().next()).__name__
+                    in_data_types.add(in_type)
+
+                process_begin_time = time.time()
+
                 outputs = self.pe.process(inputs)
+
+                process_end_time = time.time()
+                process_time += process_end_time - process_begin_time
+                if outputs:
+                    total_out_size += sys.getsizeof(outputs)
+                    out_type = type(outputs.itervalues().next()).__name__
+                    out_data_types.add(out_type)
+
                 num_iterations += 1
                 if outputs is not None:
                     # self.pe.log('Produced output: %s' % outputs)
                     for key, value in outputs.items():
+                        begin_write_time = time.time()
+
                         self._write(key, value)
+
+                        end_write_time = time.time()
+                        write_time += end_write_time - begin_write_time
+
+            read_begin_time = time.time()
+
             inputs, status = self._read()
+
+            read_end_time = time.time()
+            read_time += read_end_time - read_begin_time
+
             # self.pe.log('Result: %s, status=%s' % (inputs, STATUS[status]))
         self.pe.postprocess()
         self._terminate()
@@ -129,12 +184,26 @@ class GenericWrapper(object):
             self.pe.log('Processed 1 iteration.')
         else:
             self.pe.log('Processed %s iterations.' % num_iterations)
+        self.read_time = read_time
+        self.process_time = process_time
+        self.write_time = write_time
+        self.in_data_size = total_in_size
+        self.out_data_size = total_out_size
+        self.in_data_type = ",".join(in_data_types)
+        self.out_data_type = ",".join(out_data_types)
+        self.read_rate = self._read_calls / self.read_time
+        self.write_rate = self._write_calls / self.write_time
 
+        # self.pe.log(
+        #     "Reading %s items from input queue in %s seconds\nAverage rate at %s"
+        #     % (self._read_calls, self.read_time, self._read_calls / self.read_time)
+        # )
+
+    @calls_count
     def _read(self):
         # check the provided inputs
         if self.provided_inputs is not None:
-            if isinstance(self.provided_inputs, int) and \
-                    self.provided_inputs > 0:
+            if isinstance(self.provided_inputs, int) and self.provided_inputs > 0:
                 self.provided_inputs -= 1
                 return {}, STATUS_ACTIVE
             elif self.provided_inputs:
@@ -142,6 +211,7 @@ class GenericWrapper(object):
             else:
                 return None, STATUS_TERMINATED
 
+    @calls_count
     def _write(self, name, data):
         None
 
@@ -227,29 +297,24 @@ def _assign_processes(workflow, size):
     if totalProcesses > size:
         success = False
         # we need at least one process for each node in the graph
-        print('Graph is larger than job size: %s > %s.' %
-              (totalProcesses, size))
+        print('Graph is larger than job size: %s > %s.' % (totalProcesses, size))
     else:
         node_counter = 0
         for node in graph.nodes():
             pe = node.getContainedObject()
-            prcs = 1 if pe.id in sources else _getNumProcesses(
-                size, numSources, pe.numprocesses, totalProcesses)
+            prcs = 1 if pe.id in sources else _getNumProcesses(size, numSources, pe.numprocesses, totalProcesses)
             processes[pe.id] = range(node_counter, node_counter + prcs)
             node_counter = node_counter + prcs
     return success, sources, processes
 
 
-def _getCommunication(rank, source_processes,
-                      dest, dest_input, dest_processes):
-    communication = ShuffleCommunication(
-        rank, source_processes, dest_processes)
+def _getCommunication(rank, source_processes, dest, dest_input, dest_processes):
+    communication = ShuffleCommunication(rank, source_processes, dest_processes)
     try:
         if GROUPING in dest.inputconnections[dest_input]:
             groupingtype = dest.inputconnections[dest_input][GROUPING]
             if isinstance(groupingtype, list):
-                communication = GroupByCommunication(
-                    dest_processes, dest_input, groupingtype)
+                communication = GroupByCommunication(dest_processes, dest_input, groupingtype)
             elif groupingtype == 'all':
                 communication = OneToAllCommunication(dest_processes)
             elif groupingtype == 'global':
@@ -283,14 +348,11 @@ def _create_connections(graph, node, processes):
         if source == pe:
             for i in processes[pe.id]:
                 for (source_output, dest_input) in allconnections:
-                    communication = _getCommunication(
-                        i, source_processes, dest, dest_input, dest_processes)
+                    communication = _getCommunication(i, source_processes, dest, dest_input, dest_processes)
                     try:
-                        outputmappings[i][source_output].append(
-                            (dest_input, communication))
+                        outputmappings[i][source_output].append((dest_input, communication))
                     except KeyError:
-                        outputmappings[i][source_output] = \
-                            [(dest_input, communication)]
+                        outputmappings[i][source_output] = [(dest_input, communication)]
     return inputmappings, outputmappings
 
 
@@ -312,6 +374,7 @@ def assign_and_connect(workflow, size):
         return processes, inputmappings, outputmappings
     else:
         return None
+
 
 import copy
 
@@ -337,8 +400,8 @@ def get_partitions(workflow):
 
 
 def create_partitioned(workflow_all):
-    processes_all, inputmappings_all, outputmappings_all = \
-        assign_and_connect(workflow_all, len(workflow_all.graph.nodes()))
+    processes_all, inputmappings_all, outputmappings_all = assign_and_connect(workflow_all,
+                                                                              len(workflow_all.graph.nodes()))
     proc_to_pe_all = {v[0]: k for k, v in processes_all.items()}
     partitions = get_partitions(workflow_all)
     external_connections = []
@@ -357,8 +420,7 @@ def create_partitioned(workflow_all):
         for node in graph.nodes():
             if node.getContainedObject().id not in component_ids:
                 graph.remove_node(node)
-        processes, inputmappings, outputmappings = \
-            assign_and_connect(workflow, len(graph.nodes()))
+        processes, inputmappings, outputmappings = assign_and_connect(workflow, len(graph.nodes()))
         proc_to_pe = {}
         for node in graph.nodes():
             pe = node.getContainedObject()
@@ -368,24 +430,17 @@ def create_partitioned(workflow_all):
             pe.rank = index
             proc_all = processes_all[pe.id][0]
             for output_name in outputmappings_all[proc_all]:
-                for dest_input, comm_all in\
-                        outputmappings_all[proc_all][output_name]:
+                for dest_input, comm_all in outputmappings_all[proc_all][output_name]:
                     dest = proc_to_pe_all[comm_all.destinations[0]]
                     if dest not in processes:
                         # it's an external connection
-                        external_connections.append((comm_all,
-                                                     partition_id,
-                                                     pe.id,
-                                                     output_name,
-                                                     pe_to_partition[dest],
-                                                     dest, dest_input))
+                        external_connections.append(
+                            (comm_all, partition_id, pe.id, output_name, pe_to_partition[dest], dest, dest_input))
                         try:
                             result_mappings[pe.id].append(output_name)
                         except:
                             result_mappings[pe.id] = [output_name]
-        partition_pe = SimpleProcessingPE(inputmappings,
-                                          outputmappings,
-                                          proc_to_pe)
+        partition_pe = SimpleProcessingPE(inputmappings, outputmappings, proc_to_pe)
 
         # use number of processes if specified in graph
         try:
@@ -407,14 +462,11 @@ def create_partitioned(workflow_all):
     ubergraph.partition_pes = partition_pes
     # sort the external connections so that nodes are added in the same order
     # if doing this in multiple processes in parallel this is important
-    for comm, source_partition, source_id, source_output, dest_partition, \
-            dest_id, dest_input in sorted(external_connections):
+    for comm, source_partition, source_id, source_output, dest_partition, dest_id, dest_input in sorted(
+            external_connections):
         partition_pes[source_partition]._add_output((source_id, source_output))
-        partition_pes[dest_partition]._add_input((dest_id, dest_input),
-                                                 grouping=comm.name)
-        ubergraph.connect(partition_pes[source_partition],
-                          (source_id, source_output),
-                          partition_pes[dest_partition],
+        partition_pes[dest_partition]._add_input((dest_id, dest_input), grouping=comm.name)
+        ubergraph.connect(partition_pes[source_partition], (source_id, source_output), partition_pes[dest_partition],
                           (dest_id, dest_input))
     return ubergraph
 
@@ -432,8 +484,7 @@ def map_inputs_to_partitions(ubergraph, inputs):
         try:
             mapped_pe_input = []
             for i in inputs[pe]:
-                mapped_data = {(pe_id, name):
-                               [data] for name, data in i.items()}
+                mapped_data = {(pe_id, name): [data] for name, data in i.items()}
                 mapped_pe_input.append(mapped_data)
         except TypeError:
             mapped_pe_input = inputs[pe]
@@ -511,6 +562,7 @@ class SimpleProcessingPE(GenericPE):
     '''
     A PE that processes a subgraph of PEs in sequence.
     '''
+
     def __init__(self, input_mappings, output_mappings, proc_to_pe):
         GenericPE.__init__(self)
         # work out the order of PEs
@@ -537,9 +589,7 @@ class SimpleProcessingPE(GenericPE):
         results = {}
         for proc in self.ordered:
             pe = self.proc_to_pe[proc]
-            pe.writer = SimpleWriter(self, pe,
-                                     self.output_mappings[proc],
-                                     self.result_mappings)
+            pe.writer = SimpleWriter(self, pe, self.output_mappings[proc], self.result_mappings)
             pe._write = types.MethodType(_simple_write, pe)
             # if there was data produced in postprocessing
             # then we need to process that data in the PEs downstream
@@ -573,9 +623,7 @@ class SimpleProcessingPE(GenericPE):
         inputs = self.map_inputs(inputs)
         for proc in self.ordered:
             pe = self.proc_to_pe[proc]
-            pe.writer = SimpleWriter(self, pe,
-                                     self.output_mappings[proc],
-                                     self.result_mappings)
+            pe.writer = SimpleWriter(self, pe, self.output_mappings[proc], self.result_mappings)
             pe._write = types.MethodType(_simple_write, pe)
             provided_inputs = get_inputs(pe, inputs)
             try:
@@ -659,37 +707,32 @@ class SimpleWriter(object):
             # if there are no named result outputs
             # the data is added to the results of the PE
             if self.result_mappings is None:
-                self.simple_pe.wrapper._write((self.pe.id, output_name),
-                                              [data])
+                self.simple_pe.wrapper._write((self.pe.id, output_name), [data])
         # now check if the output is in the named results
         # (in case of a Tee) then data gets written to the PE results as well
         try:
             if output_name in self.result_mappings[self.pe.id]:
-                self.simple_pe.wrapper._write((self.pe.id, output_name),
-                                              [data])
+                self.simple_pe.wrapper._write((self.pe.id, output_name), [data])
         except:
             pass
 
 
 def create_arg_parser():  # pragma: no cover
-    parser = argparse.ArgumentParser(
-        description='Submit a dispel4py graph for processing.')
+    parser = argparse.ArgumentParser(description='Submit a dispel4py graph for processing.')
     parser.add_argument('target', help='target execution platform')
     parser.add_argument('module', help='module that creates a dispel4py graph '
-                        '(python module or file name)')
-    parser.add_argument('-a', '--attr', metavar='attribute',
-                        help='name of graph variable in the module')
-    parser.add_argument('-f', '--file', metavar='inputfile',
-                        help='file containing input dataset in JSON format')
-    parser.add_argument('-d', '--data', metavar='inputdata',
-                        help='input dataset in JSON format')
-    parser.add_argument('-i', '--iter', metavar='iterations', type=int,
-                        help='number of iterations', default=1)
+                                       '(python module or file name)')
+    parser.add_argument('-a', '--attr', metavar='attribute', help='name of graph variable in the module')
+    parser.add_argument('-f', '--file', metavar='inputfile', help='file containing input dataset in JSON format')
+    parser.add_argument('-d', '--data', metavar='inputdata', help='input dataset in JSON format')
+    parser.add_argument('-i', '--iter', metavar='iterations', type=int, help='number of iterations', default=1)
+    parser.add_argument('-p', '--profileOn', action='store_true',
+                        help='monitor performance of current workflow and store characterization data into database')
+
     return parser
 
 
 def create_inputs(args, graph):
-    import json
     inputs = {}
 
     if args.file:
@@ -741,12 +784,12 @@ def load_graph_and_inputs(args):
     return graph, inputs
 
 
-def parse_common_args():   # pragma: no cover
+def parse_common_args():  # pragma: no cover
     parser = create_arg_parser()
     return parser.parse_known_args()
 
 
-def main():   # pragma: no cover
+def main():  # pragma: no cover
     from importlib import import_module
 
     args, remaining = parse_common_args()
@@ -770,9 +813,13 @@ def main():   # pragma: no cover
         # no other arguments required for target
         pass
     process = getattr(import_module(target), 'process')
+    # mem_usg = memory_usage((process, (graph, ), {"inputs": inputs, "args": args}), interval=.2e-6, timeout=.2e-5)
+    # if mem_usg:
+    #     print mem_usg
     error_message = process(graph, inputs=inputs, args=args)
     if error_message:
         print(error_message)
+
 
 if __name__ == "__main__":  # pragma: no cover
     main()
