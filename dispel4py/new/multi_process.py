@@ -44,16 +44,25 @@ For example::
     TestOneInOneOut5 (rank 2): Processed 5 iterations.
 '''
 
-
 import argparse
 import copy
 import multiprocessing
 import traceback
 import types
+import time
+import json
+import os
+import uuid
+
 from dispel4py.new.processor \
     import GenericWrapper, simpleLogger, STATUS_ACTIVE, STATUS_TERMINATED
 from dispel4py.new import processor
+from dispel4py.new.monitor_workflow import Monitor
+from dispel4py.new.memory_profiler import memory_usage
 
+# configuration path for monitoring
+CONFIG_PATH = "/Users/anqilu/workspace/dispel4py/config.json"
+MONITOR_CONFIGS = json.load(open(CONFIG_PATH))
 
 def _processWorker(wrapper):
     wrapper.process()
@@ -72,6 +81,20 @@ def parse_args(args, namespace):    # pragma: no cover
 
 
 def process(workflow, inputs, args):
+    workflow_submission_id = uuid.uuid1().hex
+    print workflow_submission_id
+    # Check if switch profile mode on
+    if args.profileOn:
+
+        manager = multiprocessing.Manager()
+
+        # A dict to store characterization
+        profiles = manager.dict()
+
+        multi_monitor = Monitor(profiles, args, workflow)
+
+        t1 = time.time()
+
     size = args.num
     success = True
     nodes = [node.getContainedObject() for node in workflow.graph.nodes()]
@@ -108,6 +131,7 @@ def process(workflow, inputs, args):
                    'Could not create mapping for execution of graph'
 
     print('Processes: %s' % processes)
+    # print ("inputmappings: %s, \noutputmappings: %s" % (inputmappings, outputmappings))
 
     process_pes = {}
     queues = {}
@@ -123,7 +147,10 @@ def process(workflow, inputs, args):
             cp = copy.deepcopy(pe)
             cp.rank = proc
             cp.log = types.MethodType(simpleLogger, cp)
-            wrapper = MultiProcessingWrapper(proc, cp, provided_inputs)
+            if args.profileOn:
+                wrapper = MultiProcessingWrapper(proc, cp, provided_inputs, workflow_submission_id = workflow_submission_id, profiles = profiles)
+            else:
+                wrapper = MultiProcessingWrapper(proc, cp, provided_inputs, workflow_submission_id = workflow_submission_id)
             process_pes[proc] = wrapper
             wrapper.input_queue = multiprocessing.Queue()
             wrapper.input_queue.name = 'Queue_%s_%s' % (cp.id, cp.rank)
@@ -141,7 +168,7 @@ def process(workflow, inputs, args):
 
     jobs = []
     for wrapper in process_pes.values():
-        p = multiprocessing.Process(target=_processWorker, args=(wrapper,))
+        p = multiprocessing.Process(target=_processWorker, args=(wrapper, ))
         jobs.append(p)
 
     for j in jobs:
@@ -152,20 +179,41 @@ def process(workflow, inputs, args):
 
     if result_queue:
         result_queue.put(STATUS_TERMINATED)
+
+    if args.profileOn:
+        t2 = time.time()
+        t3 = t2 - t1
+
+        profiles["exec_%s" % workflow_submission_id] = t3
+        profiles["submitted_%s" % workflow_submission_id] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t1))
+        # print("Total execution workflow time is  %s recorded by proccess %s" % (t3, cp.rank))
+
+        multi_monitor.get_pe_process_map(processes, workflow_submission_id)
+        multi_monitor.analyse_and_record()
+
     return result_queue
 
 
 class MultiProcessingWrapper(GenericWrapper):
 
-    def __init__(self, rank, pe, provided_inputs=None):
+    def __init__(self, rank, pe, provided_inputs=None, profiles=None, workflow_submission_id=None):
         GenericWrapper.__init__(self, pe)
         self.pe.log = types.MethodType(simpleLogger, pe)
         self.pe.rank = rank
         self.provided_inputs = provided_inputs
         self.terminated = 0
+        self.profiles = profiles if profiles is not None else {}
+        self.workflow_submission_id = workflow_submission_id
 
     def _read(self):
+        # record memory of read process
+        memory_usage(-1, interval=1e-3, timeout=1e-2, max_usage=True, timestamps=True,
+                     stream=open(os.path.join(MONITOR_CONFIGS["memory_profile_store"], self.workflow_submission_id),
+                                 "a+"),
+                     description=("read", self.pe.id, self.pe.rank))
+
         result = super(MultiProcessingWrapper, self)._read()
+
         if result is not None:
             return result
         # read from input queue
@@ -174,22 +222,57 @@ class MultiProcessingWrapper(GenericWrapper):
             try:
                 data, status = self.input_queue.get()
                 no_data = False
+                # self.pe.log("data: %s, status: %s" %(data, status))
             except:
                 self.pe.log('Failed to read item from queue')
                 pass
+
         while status == STATUS_TERMINATED:
             self.terminated += 1
+            # self.pe.log("num_sources: %s, num_terminated: %s" % (self._num_sources, self.terminated))
             if self.terminated >= self._num_sources:
                 return data, status
             else:
                 try:
                     data, status = self.input_queue.get()
+                    # self.pe.log("data: %s, status: %s" % (data, status))
                 except:
                     self.pe.log('Failed to read item from queue')
                     pass
+
         return data, status
+    
+    def process(self):
+        # record memory of process process
+        memory_usage(-1, interval=1e-5, timeout=1e-4, max_usage=True, timestamps=True,
+                     stream=open(os.path.join(MONITOR_CONFIGS["memory_profile_store"], self.workflow_submission_id),
+                                 "a+"),
+                     description=("process", self.pe.id, self.pe.rank))
+
+        begin_total_time = time.time()
+        super(MultiProcessingWrapper, self).process()
+        end_total_time = time.time()
+        # inherit process from parent and add process time into profiles dict
+        self.profiles["process_%s" % self.pe.rank] = self.process_time
+        self.profiles["read_%s" % self.pe.rank] = self.read_time
+        self.profiles["write_%s" % self.pe.rank] = self.write_time
+        self.profiles["indatasize_%s" % self.pe.rank] = self.in_data_size
+        self.profiles["outdatasize_%s" % self.pe.rank] = self.out_data_size
+        self.profiles["indatatype_%s" % self.pe.rank] = self.in_data_type
+        self.profiles["outdatatype_%s" % self.pe.rank] = self.out_data_type
+        self.profiles["total_%s" % self.pe.rank] = end_total_time - begin_total_time
+        self.profiles["readrate_%s" % self.pe.rank] = self.read_rate
+        self.profiles["writerate_%s" % self.pe.rank] = self.write_rate
 
     def _write(self, name, data):
+        # record memory of write process
+        memory_usage(-1, interval=1e-4, timeout=1e-3, max_usage=True, timestamps=True,
+                     stream=open(os.path.join(MONITOR_CONFIGS["memory_profile_store"], self.workflow_submission_id),
+                                 "a+"),
+                     description=("write", self.pe.id, self.pe.rank))
+
+        super(MultiProcessingWrapper, self)._write(name, data)
+
         # self.pe.log('Writing %s to %s' % (data, name))
         try:
             targets = self.targets[name]
@@ -209,10 +292,15 @@ class MultiProcessingWrapper(GenericWrapper):
                     self.pe.log("Failed to write item to output '%s'" % name)
 
     def _terminate(self):
+        t1 = time.time()
         for output, targets in self.targets.items():
             for (inputName, communication) in targets:
                 for i in communication.destinations:
                     self.output_queues[i].put((None, STATUS_TERMINATED))
+        t2 = time.time()
+        t3 = t2 - t1
+        self.profiles["terminate_%s" % self.pe.rank] = t3
+        # self.pe.log("Total termination time %s for proccess %s" % (t3, self.pe.rank))
 
 
 def main():    # pragma: no cover
@@ -221,7 +309,6 @@ def main():    # pragma: no cover
 
     args, remaining = parse_common_args()
     args = parse_args(remaining, args)
-
     graph, inputs = load_graph_and_inputs(args)
     if graph is not None:
         errormsg = process(graph, inputs, args)
