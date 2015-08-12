@@ -210,7 +210,9 @@ class MultiProcessingWrapper(GenericWrapper):
     def _read(self):
         # record memory of read process
         memory_usage(-1, interval=1e-3, timeout=1e-2, max_usage=True, timestamps=True,
-                     stream=open(os.path.join(MONITOR_CONFIGS["memory_profile_store"], self.workflow_submission_id)
+                     stream=open(os.path.join(home,
+                                              MONITOR_CONFIGS["memory_profile_store"],
+                                              self.workflow_submission_id)
                                  + ".dat",
                                  "a+"),
                      description=("read", self.pe.id, self.pe.rank))
@@ -248,7 +250,9 @@ class MultiProcessingWrapper(GenericWrapper):
     def process(self):
         # record memory of process process
         memory_usage(-1, interval=1e-5, timeout=1e-4, max_usage=True, timestamps=True,
-                     stream=open(os.path.join(MONITOR_CONFIGS["memory_profile_store"], self.workflow_submission_id)
+                     stream=open(os.path.join(home,
+                                              MONITOR_CONFIGS["memory_profile_store"],
+                                              self.workflow_submission_id)
                                  + ".dat",
                                  "a+"),
                      description=("process", self.pe.id, self.pe.rank))
@@ -271,7 +275,9 @@ class MultiProcessingWrapper(GenericWrapper):
     def _write(self, name, data):
         # record memory of write process
         memory_usage(-1, interval=1e-4, timeout=1e-3, max_usage=True, timestamps=True,
-                     stream=open(os.path.join(MONITOR_CONFIGS["memory_profile_store"], self.workflow_submission_id),
+                     stream=open(os.path.join(home,
+                                              MONITOR_CONFIGS["memory_profile_store"],
+                                              self.workflow_submission_id),
                                  "a+"),
                      description=("write", self.pe.id, self.pe.rank))
 
