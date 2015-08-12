@@ -21,3 +21,10 @@ var/
 
 # Dev Env
 .idea/
+
+# Custom Workflow Files
+Astro/
+Cross_Correlation/
+
+# Shell Scripts
+*.sh

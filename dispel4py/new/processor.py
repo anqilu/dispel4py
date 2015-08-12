@@ -103,8 +103,8 @@ class GenericWrapper(object):
         self.out_data_type = None
         self._read_calls = 0
         self._write_calls = 0
-        self.read_rate = 0
-        self.write_rate = 0
+        self.read_rate = None
+        self.write_rate = None
 
     @property
     def sources(self):
@@ -191,8 +191,10 @@ class GenericWrapper(object):
         self.out_data_size = total_out_size
         self.in_data_type = ",".join(in_data_types)
         self.out_data_type = ",".join(out_data_types)
-        self.read_rate = self._read_calls / self.read_time
-        self.write_rate = self._write_calls / self.write_time
+        if self.read_time != 0:
+            self.read_rate = self._read_calls / self.read_time
+        if self.write_time != 0:
+            self.write_rate = self._write_calls / self.write_time
 
         # self.pe.log(
         #     "Reading %s items from input queue in %s seconds\nAverage rate at %s"

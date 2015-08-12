@@ -1,13 +1,24 @@
 __author__ = 'anqilu'
 
-import MySQLdb
+has_mysqldb = False
+try:
+    import MySQLdb
+    has_mysqldb = True
+except ImportError:
+    pass
+
 import json
-from os import path
+import os
 
-CONFIG_PATH = "/Users/anqilu/workspace/dispel4py/config.json"
-MONITOR_CONFIGS = json.load(open(CONFIG_PATH))
+# configuration path for monitoring
+home = os.path.expanduser("~") 
+CONFIG_PATH = os.path.join(home, "workspace/dispel4py/config.json")
+try:
+    MONITOR_CONFIGS = json.load(open(CONFIG_PATH))
+except StandardError, e:
+    print "Cannot locate configuration file for monitor"
 
-
+    
 class Monitor:
 
     def __init__(self, profiles, args, workflow):
@@ -19,7 +30,6 @@ class Monitor:
 
     def get_pe_process_map(self, map, wf_id):
         module_path = self.args.module
-        import os
         module_name_full = os.path.split(module_path)[-1]
         module_name = os.path.splitext(module_name_full)[0]
         map.setdefault(module_name, [wf_id])
@@ -57,19 +67,26 @@ class Monitor:
     def analyse_and_record(self):
         wf_name, proc_num = self.get_data_from_profiles()
 
-        db_config = MONITOR_CONFIGS["mysql_db_config"]
+        # store performance data into mysql database if mysqldb imported successfully
+        if has_mysqldb:
+            db_config = MONITOR_CONFIGS["mysql_db_config"]
 
-        conn = MySQLdb.connect(host=db_config["host"],
-                       user=db_config["user"],
-                       passwd=db_config["passwd"],
-                       db=db_config["db"])
+            conn = MySQLdb.connect(host=db_config["host"],
+                           user=db_config["user"],
+                           passwd=db_config["passwd"],
+                           db=db_config["db"])
 
-        with conn:
-            success = self.record_wf_profile(conn, wf_name, proc_num)
-            success = self.record_pe_profile(conn, wf_name) if success else success
+            with conn:
+                success = self.record_wf_profile(conn, wf_name, proc_num)
+                success = self.record_pe_profile(conn, wf_name) if success else success
 
-        if not success:
-            print "Failed to record performance data of current workflow ", wf_name
+            if not success:
+                print "Failed to record performance data of current workflow ", wf_name
+
+        else:
+            print "Trying to write performance data to file"
+            # TODO store workflow performance data to files on disk
+
 
     def record_wf_profile(self, conn, wf_name, proc_num):
         wf_id = self.cleaned_profiles[wf_name].keys()[0]
@@ -79,7 +96,7 @@ class Monitor:
         wf_mapping = self.args.target
         wf_iter_num = self.args.iter
         graph_parent_path = MONITOR_CONFIGS["graph_file_store"]
-        wf_graph = path.join(graph_parent_path, wf_id)
+        wf_graph = os.path.join(graph_parent_path, wf_id)
         wf_total_time = self.cleaned_profiles[wf_name][wf_id]["exec"]
         wf_sub_time = self.cleaned_profiles[wf_name][wf_id]["submitted"]
 

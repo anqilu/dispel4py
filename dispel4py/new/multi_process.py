@@ -60,9 +60,12 @@ from dispel4py.new import processor
 from dispel4py.new.monitor_workflow import Monitor
 from dispel4py.new.memory_profiler import memory_usage
 
+
 # configuration path for monitoring
-CONFIG_PATH = "/Users/anqilu/workspace/dispel4py/config.json"
+home = os.path.expanduser("~") 
+CONFIG_PATH = os.path.join(home, "workspace/dispel4py/config.json")
 MONITOR_CONFIGS = json.load(open(CONFIG_PATH))
+
 
 def _processWorker(wrapper):
     wrapper.process()
