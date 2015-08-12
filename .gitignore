@@ -19,6 +19,11 @@ var/
 .installed.cfg
 *.egg
 
+# Temp Files by Vim
+*~
+*.swp
+*.swo
+
 # Dev Env
 .idea/
 
