@@ -278,6 +278,7 @@ class MultiProcessingWrapper(GenericWrapper):
                      stream=open(os.path.join(home,
                                               MONITOR_CONFIGS["memory_profile_store"],
                                               self.workflow_submission_id),
+                                 + ".dat",
                                  "a+"),
                      description=("write", self.pe.id, self.pe.rank))
 

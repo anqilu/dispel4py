@@ -128,7 +128,7 @@ class Monitor:
         wf_id_bin = binascii.unhexlify(wf_id)
         wf_mapping = self.args.target
         wf_iter_num = self.args.iter
-        wf_graph = os.path.join(home, MONITOR_CONFIGS["graph_profile_store"], wf_id) + ".dot"
+        wf_graph = os.path.join(home, MONITOR_CONFIGS["graph_profile_store"], wf_id)
         wf_memory_profile = os.path.join(home, MONITOR_CONFIGS["memory_profile_store"], wf_id) + ".dat"
         wf_total_time = self.cleaned_profiles[wf_name][wf_id]["exec"]
         wf_sub_time = self.cleaned_profiles[wf_name][wf_id]["submitted"]
