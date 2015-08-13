@@ -277,7 +277,7 @@ class MultiProcessingWrapper(GenericWrapper):
         memory_usage(-1, interval=1e-4, timeout=1e-3, max_usage=True, timestamps=True,
                      stream=open(os.path.join(home,
                                               MONITOR_CONFIGS["memory_profile_store"],
-                                              self.workflow_submission_id),
+                                              self.workflow_submission_id)
                                  + ".dat",
                                  "a+"),
                      description=("write", self.pe.id, self.pe.rank))
