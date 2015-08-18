@@ -235,17 +235,11 @@ class Monitor:
 
         for (pe_id, pe_p) in self.cleaned_profiles.items():
             if pe_id != wf_name:
-                pe_total = 0
-                pe_read = 0
-                pe_write = 0
-                pe_process = 0
-                pe_terminate = 0
-                pe_indatasize = 0
-                pe_outdatasize = 0
-                pe_indatatype = ""
-                pe_outdatatype = ""
-                sum_readrate = 0
-                sum_writerate = 0
+                pei_total_sum = pei_read_sum = pei_write_sum = pei_process_sum = pei_terminate_sum = \
+                    pe_indatasize = pe_outdatasize = sum_readrate = sum_writerate = 0
+
+                pe_indatatype = pe_outdatatype = ""
+
 
                 pei_insert_data_sets = []
 
@@ -261,11 +255,11 @@ class Monitor:
                     pei_readrate = pei_p.get("readrate", 0)
                     pei_writerate = pei_p.get("writerate", 0)
 
-                    pe_total += pei_total
-                    pe_read += pei_read
-                    pe_write += pei_write
-                    pe_process += pei_process
-                    pe_terminate += pei_terminate
+                    pei_total_sum += pei_total
+                    pei_read_sum += pei_read
+                    pei_write_sum += pei_write
+                    pei_process_sum += pei_process
+                    pei_terminate_sum += pei_terminate
                     pe_indatasize += pei_indatasize
                     pe_outdatasize += pei_outdatasize
                     sum_readrate += pei_readrate if pei_readrate is not None else 0
@@ -283,10 +277,11 @@ class Monitor:
                                    pei_readrate, pei_writerate)
                     pei_insert_data_sets.append(insert_data)
 
+                instance_num = len(pe_p)
 
-                pe_row = (pe_id, wf_id_stored, pe_total,
-                          pe_read, pe_write, pe_process,
-                          pe_terminate, pe_indatasize, pe_outdatasize,
+                pe_row = (pe_id, wf_id_stored, pei_total_sum / instance_num,
+                          pei_read_sum / instance_num, pei_write_sum / instance_num, pei_process_sum / instance_num,
+                          pei_terminate_sum / instance_num, pe_indatasize, pe_outdatasize,
                           pe_indatatype, pe_outdatatype, sum_readrate / len(pe_p),
                           sum_writerate / len(pe_p))
 
