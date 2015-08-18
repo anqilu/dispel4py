@@ -325,3 +325,20 @@ def drawDot(graph):   # pragma: no cover
     p = Popen(['dot', '-T', 'png'], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     stdout, stderr = p.communicate(dot.encode('utf-8'))
     return stdout
+
+def drawDot(graph, path):
+    '''
+    Override drawDot function to enable writing to disk when path given
+    :param graph: dispel4py workflow
+    :param path: path to store png file
+    :return:
+    '''
+    from subprocess import Popen, PIPE
+    dot = draw(graph)
+
+    try:
+        p = Popen(['dot', '-T', 'png', '-o', path], stdin=PIPE, stderr=PIPE)
+        p.communicate(dot.encode("utf-8"))
+    except StandardError, e:
+        print e
+        return
