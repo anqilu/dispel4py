@@ -213,7 +213,8 @@ class MultiProcessingWrapper(GenericWrapper):
 
     def _read(self):
         # record memory of read process
-        memory_usage(-1, interval=1e-3, timeout=1e-2, max_usage=True, timestamps=True,
+        memory_usage(-1, interval=MONITOR_CONFIGS["interval"]["read"], timeout=MONITOR_CONFIGS["timeout"]["read"],
+                     max_usage=True, timestamps=True,
                      stream=open(os.path.join(current_location,
                                               MONITOR_CONFIGS["memory_profile_store"],
                                               self.workflow_submission_id)
@@ -253,7 +254,8 @@ class MultiProcessingWrapper(GenericWrapper):
     
     def process(self):
         # record memory of process process
-        memory_usage(-1, interval=1e-5, timeout=1e-4, max_usage=True, timestamps=True,
+        memory_usage(-1, interval=MONITOR_CONFIGS["interval"]["process"], timeout=MONITOR_CONFIGS["timeout"]["process"],
+                     max_usage=True, timestamps=True,
                      stream=open(os.path.join(current_location,
                                               MONITOR_CONFIGS["memory_profile_store"],
                                               self.workflow_submission_id)
@@ -278,7 +280,8 @@ class MultiProcessingWrapper(GenericWrapper):
 
     def _write(self, name, data):
         # record memory of write process
-        memory_usage(-1, interval=1e-4, timeout=1e-3, max_usage=True, timestamps=True,
+        memory_usage(-1, interval=MONITOR_CONFIGS["interval"]["write"], timeout=MONITOR_CONFIGS["timeout"]["write"],
+                     max_usage=True, timestamps=True,
                      stream=open(os.path.join(current_location,
                                               MONITOR_CONFIGS["memory_profile_store"],
                                               self.workflow_submission_id)
