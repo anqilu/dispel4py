@@ -169,7 +169,7 @@ class Monitor:
 
         elif writeto == _CSV:
 
-            wf_output_path = os.path.join(home, MONITOR_CONFIGS["workflow_profile_store"], wf_id) + "-wf.csv"
+            wf_output_path = os.path.join(current_location, MONITOR_CONFIGS["workflow_profile_store"], wf_id) + "-wf.csv"
             wf_headers = ["WF_SubmissionID", "WF_Name", "WF_Mapping",
                        "WF_ProcessorNum", "WF_IterationNum", "WF_GraphDescription",
                        "WF_MemoryProfile", "WF_TotalTime", "WF_Submitted"]
@@ -221,9 +221,9 @@ class Monitor:
                            "PEI_ProcessTime", "PEI_TerminateTime", "PEI_InDataSize",
                            "PEI_OutDataSize", "PEI_ReadRate", "PEI_WriteRate"]
 
-            pe_output_path = os.path.join(home, MONITOR_CONFIGS["workflow_profile_store"], wf_id) + "-pe.csv"
+            pe_output_path = os.path.join(current_location, MONITOR_CONFIGS["workflow_profile_store"], wf_id) + "-pe.csv"
 
-            pei_output_path = os.path.join(home, MONITOR_CONFIGS["workflow_profile_store"], wf_id) + "-pei.csv"
+            pei_output_path = os.path.join(current_location, MONITOR_CONFIGS["workflow_profile_store"], wf_id) + "-pei.csv"
 
             with open(pe_output_path, "w") as f:
                 pe_f_csv = csv.writer(f)
