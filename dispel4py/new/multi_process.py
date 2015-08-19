@@ -61,9 +61,13 @@ from dispel4py.new.monitor_workflow import Monitor, memory_usage
 
 
 # configuration path for monitoring
-home = os.path.expanduser("~") 
-CONFIG_PATH = os.path.join(home, "workspace/dispel4py/config.json")
-MONITOR_CONFIGS = json.load(open(CONFIG_PATH))
+current_location = os.getcwd()
+CONFIG_PATH = os.path.join(current_location, "config.json")
+try:
+    MONITOR_CONFIGS = json.load(open(CONFIG_PATH))
+except StandardError, e:
+    print "Cannot locate configuration file for monitor"
+    print e
 
 
 def _processWorker(wrapper):
@@ -210,7 +214,7 @@ class MultiProcessingWrapper(GenericWrapper):
     def _read(self):
         # record memory of read process
         memory_usage(-1, interval=1e-3, timeout=1e-2, max_usage=True, timestamps=True,
-                     stream=open(os.path.join(home,
+                     stream=open(os.path.join(current_location,
                                               MONITOR_CONFIGS["memory_profile_store"],
                                               self.workflow_submission_id)
                                  + ".dat",
@@ -250,7 +254,7 @@ class MultiProcessingWrapper(GenericWrapper):
     def process(self):
         # record memory of process process
         memory_usage(-1, interval=1e-5, timeout=1e-4, max_usage=True, timestamps=True,
-                     stream=open(os.path.join(home,
+                     stream=open(os.path.join(current_location,
                                               MONITOR_CONFIGS["memory_profile_store"],
                                               self.workflow_submission_id)
                                  + ".dat",
@@ -275,7 +279,7 @@ class MultiProcessingWrapper(GenericWrapper):
     def _write(self, name, data):
         # record memory of write process
         memory_usage(-1, interval=1e-4, timeout=1e-3, max_usage=True, timestamps=True,
-                     stream=open(os.path.join(home,
+                     stream=open(os.path.join(current_location,
                                               MONITOR_CONFIGS["memory_profile_store"],
                                               self.workflow_submission_id)
                                  + ".dat",

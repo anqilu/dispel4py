@@ -33,3 +33,9 @@ Cross_Correlation/
 
 # Shell Scripts
 *.sh
+
+# Config file and data container for PF
+graphs/
+performance_data/
+memory/
+config.json
