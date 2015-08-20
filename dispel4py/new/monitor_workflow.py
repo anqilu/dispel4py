@@ -429,7 +429,7 @@ def memory_usage(proc=-1, interval=.1, timeout=None, timestamps=False, include_c
             f, args, kw = (proc[0], (), {})
         elif len(proc) == 2:
             f, args, kw = (proc[0], proc[1], {})
-            print args
+            # print args
         elif len(proc) == 3:
             f, args, kw = (proc[0], proc[1], proc[2])
         else:

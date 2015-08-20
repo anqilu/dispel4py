@@ -1,0 +1,134 @@
+I. how to install dispel4py with profiling framework
+
+    1.Go to /exports/work/inf_dir/
+
+    2.Create a new folder, assuming the new folder named "rosa"
+
+    3.Go to /exports/work/inf_dir/rosa
+
+    4.Run following command:
+        git clone https://github.com/anqilu/dispel4py.git
+
+    5.Go to /exports/work/inf_dir/rosa/dispel4py
+
+    6.Create following 3 folders: "graphs", "performance_data", "memory"
+
+    7.Create a file named "config.json"
+
+    8.Copy following contents to config.json
+
+{
+    "graph_profile_store": "graphs/",
+
+    "workflow_profile_store": "performance_data/",
+
+    "mysql_db_config": {
+           "passwd": "x",
+           "host": "localhost",
+           "db": "test",
+           "user": "anqi"
+           },
+
+    "store_png": false,
+
+    "memory_profile_store": "memory/",
+
+    "interval": {"read":0.0005, "write":0.0004, "process":0.013},
+
+    "timeout": {"read":0.005, "write":0.004, "process":0.13}
+
+}
+
+
+II. how to run workflows with profiling framework
+
+************************************************
+************************************************
+***  make sure you are executing scripts in  ***
+***  /exports/work/inf_dir/rosa/dispel4py    ***
+************************************************
+************************************************
+
+
+    9. Run following bash script to load Anaconda environment
+
+        . /etc/profile.d/modules.sh
+        module load anaconda/2.1.0
+
+
+       After you load Anaconda, when you enter Python shell, you should see this:
+
+      ========================================================================
+      Python 2.7.8 |Anaconda 2.1.0 (64-bit)| (default, Aug 21 2014, 18:22:21)
+      [GCC 4.4.7 20120313 (Red Hat 4.4.7-1)] on linux2
+      Type "help", "copyright", "credits" or "license" for more information.
+      Anaconda is brought to you by Continuum Analytics.
+      Please check out: http://continuum.io/thanks and https://binstar.org
+      ========================================================================
+
+    10.Run a pipelinetest workflow with following command to test if everything works correctly
+      * BE AWARE OF THE    -p    ARGUMENT IN THE END
+
+        python -m dispel4py.new.processor multi dispel4py/examples/graph_testing/pipeline_test.py -n 6 -i 1 -p
+
+
+       You should see result on screen like this:
+      ========================================================================
+      Processing 1 iteration.
+      0fee2dfc46a011e58c48e41f13619224
+      Processes: {'TestProducer0': [1], 'TestOneInOneOut5': [4], 'TestOneInOneOut4': [0], 'TestOneInOneOut3': [5], 'TestOneInOneOut2': [2], 'TestOneInOneOut1': [3]}
+      TestProducer0 (rank 1): Processed 1 iteration.
+      TestOneInOneOut1 (rank 3): Processed 1 iteration.
+      TestOneInOneOut2 (rank 2): Processed 1 iteration.
+      TestOneInOneOut3 (rank 5): Processed 1 iteration.
+      TestOneInOneOut4 (rank 0): Processed 1 iteration.
+      TestOneInOneOut5 (rank 4): Processed 1 iteration.
+      {'pipeline_test': {'0fee2dfc46a011e58c48e41f13619224': {'submitted': '2015-08-19 19:28:18', 'exec': 0.07755303382873535}}, 'TestProducer0': {'1': {'indatasize': 0, 'process': 3.1948089599609375e-05, 'outdatasize': 280, 'terminate': 2.9087066650390625e-05, 'write': 0.004363059997558594, 'read': 0.026003122329711914, 'outdatatype': 'int', 'readrate': 76.91384037042131, 'total': 0.03222393989562988, 'writerate': 229.19693989071038, 'indatatype': ''}}, 'TestOneInOneOut5': {'4': {'indatasize': 280, 'process': 1.5974044799804688e-05, 'outdatasize': 280, 'terminate': 2.86102294921875e-06, 'write': 0.003515958786010742, 'read': 0.04584789276123047, 'outdatatype': 'int', 'readrate': 43.62250650026001, 'total': 0.05054306983947754, 'writerate': 284.41744083542415, 'indatatype': 'int'}}, 'TestOneInOneOut4': {'0': {'indatasize': 280, 'process': 1.811981201171875e-05, 'outdatasize': 280, 'terminate': 2.7179718017578125e-05, 'write': 0.0043680667877197266, 'read': 0.044940948486328125, 'outdatatype': 'int', 'readrate': 44.50284356166709, 'total': 0.05066490173339844, 'writerate': 228.9342284809781, 'indatatype': 'int'}}, 'TestOneInOneOut3': {'5': {'indatasize': 280, 'process': 1.6927719116210938e-05, 'outdatasize': 280, 'terminate': 3.4809112548828125e-05, 'write': 0.004221916198730469, 'read': 0.035531044006347656, 'outdatatype': 'int', 'readrate': 56.288804788361915, 'total': 0.04096794128417969, 'writerate': 236.85927264513214, 'indatatype': 'int'}}, 'TestOneInOneOut2': {'2': {'indatasize': 280, 'process': 1.5974044799804688e-05, 'outdatasize': 280, 'terminate': 2.6941299438476562e-05, 'write': 0.004099845886230469, 'read': 0.034700870513916016, 'outdatatype': 'int', 'readrate': 57.63544171602105, 'total': 0.040438175201416016, 'writerate': 243.91160735054663, 'indatatype': 'int'}}, 'TestOneInOneOut1': {'3': {'indatasize': 280, 'process': 1.5974044799804688e-05, 'outdatasize': 280, 'terminate': 2.7894973754882812e-05, 'write': 0.0040628910064697266, 'read': 0.03032994270324707, 'outdatatype': 'int', 'readrate': 65.94143680284247, 'total': 0.035798072814941406, 'writerate': 246.13015668094596, 'indatatype': 'int'}}}
+      Trying to write performance data to csv file
+      Workflow benchmark written to disk
+      Performance data written to csv files
+      ========================================================================
+
+    11.Run Astro workflow with following run_astro.sh
+
+      #!/bin/sh
+      #$ -N astro
+      #$ -cwd
+      #$ -pe OpenMP 4
+      #$ -l h_rt=00:30:00
+
+      . /etc/profile.d/modules.sh
+      module load anaconda/2.1.0
+
+      ########################################################################
+      python -m dispel4py.new.processor multi Astro/int_ext_graph.py -d '{"read" : [ {"input" : "Astro/coordinates.txt"} ]}' -n 4 -s -p
+      ########################################################################
+
+       This bash sript need to be run with following command:
+
+       qsub -P inf_dir run_astro.sh
+
+       You should see following results in tail of astro.o****
+       (Do not worry about erro [Errno 2] if it occur. It is caused by the module of generating png not existing on Eddie)
+      ========================================================================
+      {'int_ext_graph': {'5d69d0e846a711e59b9de41f13efbb4a': {'submitted': '2015-08-19 20:20:34', 'exec': 87.59787607192993}}, 'SimpleProcessingPE5': {'1': {'indatasize': 98000, 'process': 84.72432374954224, 'outdatasize': 0, 'terminate': 9.5367431640625e-07, 'write': 0, 'read': 2.6937785148620605, 'outdatatype': '', 'readrate': 130.3002448283962, 'total': 87.42458200454712, 'writerate': None, 'indatatype': 'list'}, '0': {'indatasize': 98280, 'process': 79.83362913131714, 'outdatasize': 0, 'terminate': 9.5367431640625e-07, 'write': 0, 'read': 2.6808664798736572, 'outdatatype': '', 'readrate': 131.3008322654655, 'total': 82.52117991447449, 'writerate': None, 'indatatype': 'list'}, '2': {'indatasize': 98000, 'process': 79.42206120491028, 'outdatasize': 0, 'terminate': 9.5367431640625e-07, 'write': 0, 'read': 2.6943840980529785, 'outdatatype': '', 'readrate': 130.2709588635267, 'total': 82.12280106544495, 'writerate': None, 'indatatype': 'list'}}, 'SimpleProcessingPE4': {'3': {'indatasize': 280, 'process': 7.036962985992432, 'outdatasize': 0, 'terminate': 5.0067901611328125e-05, 'write': 0, 'read': 0.015276670455932617, 'outdatatype': '', 'readrate': 130.9185797893094, 'total': 7.054179906845093, 'writerate': None, 'indatatype': 'list'}}}
+      Trying to write performance data to csv file
+      Workflow benchmark written to disk
+      Performance data written to csv files
+      ========================================================================
+
+       You need to find the submission id of this workflow, which follows the workflow name "int_ext_graph"
+       In this example I show you, it is 5d69d0e846a711e59b9de41f13efbb4a.
+
+    12.Look into your Performance Database with the submission ID
+
+        A. Relational performance database
+        Workflow performance data in performance_data/submissionID-wf.csv
+        PE performance data in performance_data/submissionID-pe.csv
+        PEI performance data in performance_data/submissionID-pei.csv
+
+        B. Memory
+        memory log in memory/submissionID.dat
+
+        C. Graph
+        graph in graphs/submissionID.dot
