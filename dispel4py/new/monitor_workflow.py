@@ -429,6 +429,7 @@ def memory_usage(proc=-1, interval=.1, timeout=None, timestamps=False, include_c
             f, args, kw = (proc[0], (), {})
         elif len(proc) == 2:
             f, args, kw = (proc[0], proc[1], {})
+            print args
         elif len(proc) == 3:
             f, args, kw = (proc[0], proc[1], proc[2])
         else:
@@ -442,14 +443,28 @@ def memory_usage(proc=-1, interval=.1, timeout=None, timestamps=False, include_c
             parent_conn.recv()  # wait until we start getting memory
             returned = f(*args, **kw)
             parent_conn.send(0)  # finish timing
-            ret = parent_conn.recv()
-            n_measurements = parent_conn.recv()
+            ret = parent_conn.recv() # [memory1, memory2, memory3, ...] or [max_memory]
+            n_measurements = parent_conn.recv() # counts of measurement
             if retval:
                 ret = ret, returned
             p.join(5 * interval)
             if n_measurements > 4 or interval < 1e-6:
                 break
             interval /= 10.
+
+        # Write and flush max memory usage
+        if stream is not None and max_usage:
+            if description is not None:
+                mem_usg_output = "MEM\t{0:.6f}\t{1}\t{2}\n".format(ret[0][0][0],
+                                                                   time.strftime('%Y-%m-%d %H:%M:%S',
+                                                                                 time.localtime(ret[0][0][1])),
+                                                                   description)
+            else:
+                mem_usg_output = "MEM\t{0:.6f}\t{1}\n".format(ret[0][0][0],
+                                                              time.strftime('%Y-%m-%d %H:%M:%S',
+                                                                            time.localtime(ret[0][0][1])))
+        stream.write(mem_usg_output)
+        stream.flush()
 
     else:
         # external process
@@ -499,9 +514,10 @@ def memory_usage(proc=-1, interval=.1, timeout=None, timestamps=False, include_c
             stream.write(mem_usg_output)
             stream.flush()
 
-    if stream:
+    if retval:
+        return ret[1]
+    else:
         return None
-    return ret
 
 
 class MemTimer(Process):

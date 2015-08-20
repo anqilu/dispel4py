@@ -203,7 +203,7 @@ def process(workflow, inputs, args):
 class MultiProcessingWrapper(GenericWrapper):
 
     def __init__(self, rank, pe, provided_inputs=None, profiles=None, workflow_submission_id=None):
-        GenericWrapper.__init__(self, pe)
+        GenericWrapper.__init__(self, pe, workflow_id=workflow_submission_id)
         self.pe.log = types.MethodType(simpleLogger, pe)
         self.pe.rank = rank
         self.provided_inputs = provided_inputs
@@ -253,16 +253,6 @@ class MultiProcessingWrapper(GenericWrapper):
         return data, status
     
     def process(self):
-        # record memory of process process
-        memory_usage(-1, interval=MONITOR_CONFIGS["interval"]["process"], timeout=MONITOR_CONFIGS["timeout"]["process"],
-                     max_usage=True, timestamps=True,
-                     stream=open(os.path.join(current_location,
-                                              MONITOR_CONFIGS["memory_profile_store"],
-                                              self.workflow_submission_id)
-                                 + ".dat",
-                                 "a+"),
-                     description=("process", self.pe.id, self.pe.rank))
-
         begin_total_time = time.time()
         super(MultiProcessingWrapper, self).process()
         end_total_time = time.time()
@@ -288,7 +278,6 @@ class MultiProcessingWrapper(GenericWrapper):
                                  + ".dat",
                                  "a+"),
                      description=("write", self.pe.id, self.pe.rank))
-
         super(MultiProcessingWrapper, self)._write(name, data)
 
         # self.pe.log('Writing %s to %s' % (data, name))

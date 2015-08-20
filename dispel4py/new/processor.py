@@ -46,7 +46,7 @@ import json
 from dispel4py.core import GROUPING
 from dispel4py.utils import make_hash
 from dispel4py.new.mappings import config
-from dispel4py.new.monitor_workflow import calls_count
+from dispel4py.new.monitor_workflow import calls_count, Monitor, memory_usage
 
 STATUS_ACTIVE = 10
 STATUS_INACTIVE = 11
@@ -54,6 +54,16 @@ STATUS_TERMINATED = 12
 # mapping for name to value
 STATUS = {STATUS_ACTIVE: 'ACTIVE', STATUS_INACTIVE: 'INACTIVE', STATUS_TERMINATED: 'TERMINATED'}
 
+# configuration path for monitoring
+current_location = os.getcwd()
+CONFIG_PATH = os.path.join(current_location, "config.json")
+try:
+    MONITOR_CONFIGS = json.load(open(CONFIG_PATH))
+except StandardError, e:
+    print "Cannot locate configuration file for monitor"
+    print e
+
+WORKFLOW_ID = None
 
 def simpleLogger(self, msg):
     try:
@@ -87,7 +97,7 @@ class GenericWriter(object):
 
 
 class GenericWrapper(object):
-    def __init__(self, pe):
+    def __init__(self, pe, workflow_id=None):
         self.pe = pe
         self.pe.wrapper = self
         for o in self.pe.outputconnections:
@@ -105,6 +115,10 @@ class GenericWrapper(object):
         self._write_calls = 0
         self.read_rate = None
         self.write_rate = None
+        self.workflow_submission_id = workflow_id
+
+        # global WORKFLOW_ID
+        # WORKFLOW_ID = workflow_id
 
     @property
     def sources(self):
@@ -150,7 +164,22 @@ class GenericWrapper(object):
 
                 process_begin_time = time.time()
 
-                outputs = self.pe.process(inputs)
+                try:
+                    outputs = memory_usage(
+                        (self.pe.process, (inputs,)),
+                        interval=MONITOR_CONFIGS["interval"]["process"],
+                        timeout=MONITOR_CONFIGS["timeout"]["process"],
+                        max_usage=True, timestamps=True,
+                        retval=True,
+                        stream=open(os.path.join(current_location,
+                                                MONITOR_CONFIGS["memory_profile_store"],
+                                                self.workflow_submission_id) + ".dat",
+                                    "a+"),
+                        description=("process", self.pe.id, self.pe.rank))
+
+                except StandardError, e:
+                    print e
+                    outputs = self.pe.process(inputs)
 
                 process_end_time = time.time()
                 process_time += process_end_time - process_begin_time
@@ -617,6 +646,8 @@ class SimpleProcessingPE(GenericPE):
             pe.writer.results = {}
         results = self.map_outputs(results)
         for key, value in results.items():
+            # to intercept the call counts, do nothing
+            super(SimpleProcessingPE, self)._write(key, value)
             self._write(key, value)
 
     def _process(self, inputs):
@@ -688,8 +719,25 @@ class SimpleWriter(object):
         self.result_mappings = result_mappings
         self.all_inputs = {}
         self.results = {}
+        # self.workflow_submission_id = WORKFLOW_ID
 
     def write(self, output_name, data):
+        # try:
+        #     memory_usage(
+        #         -1,
+        #         interval=MONITOR_CONFIGS["interval"]["write"],
+        #         timeout=MONITOR_CONFIGS["timeout"]["write"],
+        #         max_usage=True, timestamps=True,
+        #         retval=False,
+        #         stream=open(os.path.join(current_location,
+        #                                 MONITOR_CONFIGS["memory_profile_store"],
+        #                                 self.workflow_submission_id) + ".dat",
+        #                     "a+"),
+        #         description=("write", self.pe.id, self.pe.rank))
+        #
+        # except StandardError, e:
+        #     print e
+
         # self.pe.log('Writing %s to %s' % (data, output_name))
         try:
             destinations = self.output_mappings[output_name]
